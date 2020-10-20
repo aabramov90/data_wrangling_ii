@@ -74,4 +74,3 @@ rest_inspections %>%
   geom_bar() +
   facet_wrap(. ~ grade)
 ```
-
