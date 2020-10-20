@@ -1,0 +1,355 @@
+---
+title: "Homework 3"
+author: "Alexey Abramov"
+date:  "10/6/2020"
+output: github_document
+---
+
+# Setup
+```{r, setup}
+library(tidyverse)
+library(patchwork)
+library(hexbin)
+library(ggridges)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(
+  ggthemes::theme_clean() + theme(legend.position = "bottom")
+  )
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.colour = "viridis"
+)
+
+scale_colour_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+## Load the dataset.
+
+```{r}
+library(p8105.datasets)
+data("instacart")
+instacart
+```
+
+### Problem 1
+
+This dataset contains `r nrow(instacart)` rows and `r ncol(instacart)` columns.  
+
+How many aisles, and which are most items from?
+Here we are using the count function and arranging from most to least.
+
+```{r}
+aisles_df = instacart %>% 
+  count(aisle) %>% 
+  arrange(desc(n))
+```
+
+There are `r nrow(aisles_df)` aisles in this dataset.  
+
+
+Let's make a plot of these data.
+
+```{r}
+instacart %>% 
+  count(aisle) %>% 
+  arrange(desc(n)) %>% 
+  filter(n > 10000) %>% 
+  mutate(
+    aisle = factor(aisle),
+    aisle = fct_reorder(aisle, n)
+  ) %>% 
+  ggplot(aes(x = aisle, y = n)) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+Make a table with the three most popular items in these specific aisles: baking ingredients, dog food care, and packaged vegetable fruits.
+
+First we'll get the aisles, count them, then rank them and put them in a table.   
+
+```{r}
+instacart %>% 
+  filter(aisle %in% c("baking ingredients", "dog food care", "packaged vegetables fruits")) %>% 
+  group_by(aisle) %>% 
+  count(product_name) %>% 
+  mutate(rank = min_rank(desc(n))) %>% 
+  filter(rank < 4) %>% 
+  arrange(aisle, rank) %>% 
+  knitr::kable()
+```
+
+Apples versus ice cream.
+
+If we want the average of a product at a certain time, we can use the group_by and then summarize functions.  
+
+```{r}
+instacart %>% 
+  filter(product_name %in% c("Pink Lady Apples", "Coffee Ice Cream")) %>% 
+  group_by(product_name, order_dow) %>% 
+  summarize(mean_hour = mean(order_hour_of_day)) %>% 
+  pivot_wider(
+    names_from = order_dow,
+    values_from = mean_hour) %>% 
+    knitr::kable()
+```
+
+# Problem 2
+
+Read in data and data wrangling.  
+Here we are pivoting to longer to create minute and activity columns, creating a weekday column that identifies weekday vs. weekend and then creating the day of the week into a factor variable with 7 levels.  
+
+## Problem 2 Data Wrangling and EDA
+
+```{r}
+accel_df = read_csv("./data/accel_data.csv") %>%
+  pivot_longer(activity.1:activity.1440, 
+      names_to = "minute", 
+      values_to = "activity_count",
+      names_prefix = "activity.") %>% 
+  mutate(
+    weekdays = case_when(
+      day %in% c("Monday","Tuesday","Wednesday","Thursday","Friday") ~  
+        "weekday",
+      day %in% c("Saturday","Sunday") ~ "weekend")) %>% 
+  group_by(day, day_id) %>% 
+  mutate(
+    day = factor(day)) %>% 
+  ungroup()
+```
+
+Summarizing data here and performing some calculations by the day of the week and performing a few group_by calculations to learn more about patterns in the dataset.
+
+This is weekday vs. weekend
+```{r}
+accel_summary1 = 
+  accel_df %>% 
+  group_by(weekdays) %>% 
+    summarize(
+      mean_daily_activity = mean(activity_count, na.rm = TRUE)) %>% 
+    knitr::kable()
+accel_summary1
+```
+
+This is by day of the week.
+```{r}
+accel_summary2 = 
+  accel_df %>% 
+  group_by(day) %>% 
+    summarize(
+      mean_daily_activity = mean(activity_count, na.rm = TRUE)) %>% 
+    knitr::kable()
+accel_summary2
+```
+
+This is week to week.
+
+```{r}
+accel_summary3 = 
+  accel_df %>% 
+  group_by(week) %>% 
+    summarize(
+      mean_daily_activity = mean(activity_count, na.rm = TRUE)) %>% 
+    knitr::kable()
+accel_summary3
+```
+
+### Discussion
+
+The activity count data has `r nrow(accel_df)` rows and `r ncol(accel_df)` columns.  The rows reflect activity count observed at every minute of the day.  Columns serve to group these data by week and day of the week. There is an additional column that groups the day of the week by weekday and weekend. 
+
+The above summarized data show mean activity counts calculated by day of the week, weekday vs. weekend and also week to week. Provided these data, we can appreciate that this individual is more active and weekdays, less active and weekends.  More specifically, he is most active on Fridays and least active on Saturdays. Lastly, he was most active in the 2nd and 3rd week. 
+
+## Problem 2 Plots
+
+Recreating the summary table.
+```{r}
+accel_summary2b = 
+  accel_df %>% 
+  group_by(day) %>% 
+    summarize(
+      mean_daily_activity = mean(activity_count, na.rm = TRUE)) 
+accel_summary2b
+```
+
+Hm.  This a plot of the daily averages across the week.  
+```{r}
+accel_plot1 = 
+  accel_summary2b %>% 
+  ggplot(aes(x = day, y = mean_daily_activity)) +
+  geom_point()
+```
+
+```{r}
+accel_plot2 = 
+  accel_df %>% 
+  ggplot(aes(x = minute, y = activity_count, color = day)) +
+  geom_line() +
+  labs(
+    title = "Daily Activity Count",
+    x = "Minute of the Day (min)",
+    y = "Activity Count",
+    caption = "Data from Advanced Cardiac Care Center of Columbia University Medical Center.")
+accel_plot2
+```
+
+Example to also consider, daily activity counts by day.  Here is the Friday activity count.  
+```{r}
+accel_plot3 = 
+  accel_df %>% 
+  filter(day == "Friday") %>% 
+  ggplot(aes(x = minute, y = activity_count)) +
+  geom_line() +
+  labs(
+    title = "Friday Activity Count",
+    x = "Minute of the Day (min)",
+    y = "Activity Count",
+    caption = "Data from Advanced Cardiac Care Center of Columbia University Medical Center.")
+accel_plot3
+```
+
+# Problem 3
+
+## Problem 3 Data Wrangling and EDA
+
+Read in the dataset.
+```{r}
+library(p8105.datasets)
+data("ny_noaa")
+```
+
+Beginning with data wrangling.
+
+```{r}
+ny_noaa_tidy = 
+  ny_noaa %>% 
+  separate(date, into = c("year", "month", "day"), sep = "-") %>% 
+  mutate(
+    tmin = as.numeric(tmin),
+    tmax = as.numeric(tmax),
+    month = as.integer(month),
+    day = as.numeric(day)
+    )
+```
+
+Creating a month name tibble.
+```{r}
+month_df = 
+  tibble(
+    month = 1:12,
+    month_name = month.name)
+```
+
+Left joining month name tibble and ny_noaa
+
+```{r}
+ny_noaa_tidy = 
+  left_join(ny_noaa_tidy, month_df, by = "month")
+```
+
+```{r}
+ny_noaa_tidy %>% 
+  group_by(month_name, month) %>% 
+  mutate(
+    month_name = factor(month_name)
+    ) %>% 
+  ungroup()
+```
+
+Most common values using the count and rank functions.  
+
+```{r}
+ny_noaa_snow = ny_noaa_tidy %>% 
+  filter(snow > 0) %>% 
+  count(snow) %>% 
+  arrange(desc(n)) %>% 
+  mutate(rank = min_rank(desc(n))) %>% 
+  filter(rank < 4) %>% 
+  knitr::kable()
+```
+
+The most common amount of snowfall recorded was 25mm, 13mm and 51mm.
+
+Making a January plot:
+
+```{r}
+ny_noaa_temp_Jan_plot = ny_noaa_tidy %>% 
+  group_by(id, month_name, year) %>% 
+  filter(month_name == "January") %>% 
+  summarize(
+    mean_max_temp = mean(tmax, na.rm = TRUE)) %>% 
+  drop_na() %>% 
+  ggplot(aes(x = year, y = mean_max_temp, group = id, color = id)) + 
+  geom_hex() + theme(legend.position = "none") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(
+    title = "January Temperatures",
+    x = "Year",
+    y = "Mean Maximum Temperature (C)",
+    caption = "NOAA National Climatic Data Center.")
+```
+
+Making a July plot:
+```{r}
+ny_noaa_temp_July_plot = ny_noaa_tidy %>% 
+  group_by(id, month_name, year) %>% 
+  filter(month_name == "July") %>% 
+  summarize(
+    mean_max_temp = mean(tmax, na.rm = TRUE)) %>% 
+  drop_na() %>% 
+  ggplot(aes(x = year, y = mean_max_temp, group = id, color = id)) + 
+  geom_hex() + 
+  theme(legend.position = "none") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(
+    title = "January Temperatures",
+    x = "Year",
+    y = "Mean Maximum Temperature (C)",
+    caption = "NOAA National Climatic Data Center.")
+```
+
+Two plots
+```{r}
+ny_noaa_temp_Jan_plot + ny_noaa_temp_July_plot
+```
+
+### Discussion
+These two plots of January and July temperatures from all the reporting weather stations in New York across the years demonstrate a trend toward increasing temperatures in January with  wider variance as compared to July temperatures which appear to remain fairly similar over time.
+
+```{r}
+tmax_tmin_plot = 
+  ny_noaa_tidy %>% 
+  ggplot(aes(x = tmin, y = tmax)) + geom_hex()  +
+  labs(
+    title = "Maximum and Minimal Temperatures",
+    x = "Temperature Max",
+    y = "Temperature Min",
+    caption = "NOAA National Climatic Data Center.") +
+    theme(legend.position = "none")
+```
+
+Now creating the snowplot
+```{r}
+ny_noaa_snowfall_plot = 
+  ny_noaa_tidy %>%
+  filter(snow > 0 & snow < 100) %>%
+  ggplot(aes(x = snow, y = year)) + geom_density_ridges() +
+  labs(
+    title = "Distribution of Snowfall Over Years",
+    x = "Snowfall in mm",
+    y = "Years",
+    caption = "NOAA National Climatic Data Center.")
+```
+
+Two plots
+```{r}
+tmax_tmin_plot / ny_noaa_snowfall_plot
+```
+
